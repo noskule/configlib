@@ -75,7 +75,7 @@ Includes config loading, modification, backup validation, and reset-to-default b
 
 # 📌 Project Structure
 
-    src/
+    configlib/
     ├── configlib/
     │   ├── appconfig.py
     │   ├── pathresolver.py

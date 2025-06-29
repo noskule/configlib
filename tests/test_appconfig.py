@@ -1,7 +1,7 @@
 import tempfile
 import json
 from pathlib import Path
-from configlib.src import AppConfig
+from src.configlib.configlib import AppConfig
 
 
 def write_json(path: Path, data: dict):

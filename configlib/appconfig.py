@@ -2,7 +2,7 @@ from pathlib import Path
 import json
 import ast
 from typing import Any, Dict, Union
-from configlib.src.configlib.pathresolver import PathResolver
+from configlib.pathresolver import PathResolver
 
 
 class AppConfig:
@@ -50,7 +50,7 @@ class AppConfig:
                 self.config_file.write_text(default_text, encoding='utf-8')
             else:
                 raise FileNotFoundError(
-                    f"Config missing and default not found: {self.config_file}, {self.config_file_default}")
+                    f"Config missing and default not found: \n    {self.config_file}\n    {self.config_file_default}")
 
     def _process_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -209,7 +209,7 @@ class AppConfig:
 if __name__ == '__main__':
     project_root = Path(__file__).parent.resolve()
     print("[INFO] Project Root:", project_root)
-    config = AppConfig(project_root, '../../config')
+    config = AppConfig(project_root, '../config')
 
     print("[INFO] Wiki Path:", config.path['wiki'])
     print("[INFO] Project Root:", config.project_root)
