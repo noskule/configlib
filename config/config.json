@@ -24,74 +24,43 @@
             "Dashboard"
         ]
     },
-    "config_path": "C:\\DEV\\GGplusManualGenerator\\src\\..\\config\\config.json",
     "git": {
         "branch": "wikiMaster"
     },
     "log": {
         "lvl": "info"
     },
-    "manual": {
-        "header": "C:\\DEV\\GGPlusManualData\\Wiki\\Anleitungen\\EINSTELLUNGEN\\HANDBUECHER"
-    },
-    "manuals": {
-        "all": [
-            "TEST ",
-            "GG_Superadmin ",
-            "GG_Servicetechniker ",
-            "GG_Fachspezialisten ",
-            "GG_Kundenservice ",
-            "GG_Verkauf ",
-            "GG_Ariane_Inbetriebnahme ",
-            "GG_Hobart_Inbetriebnahme ",
-            "Händler ",
-            "Betriebsleiter ",
-            "GG_Connectivity ",
-            "GGPlusPay ",
-            "GG_Etikettendrucker ",
-            "Reinigungsmittel_Lieferanten "
-        ],
-        "selected": []
-    },
-    "project_root": "C:\\DEV\\GGPlusManualData",
-    "path": {
-        "data": "",
-        "wiki": "Wiki",
-        "trans": "Translations",
-        "toc_matrix": "Wiki\\Anleitungen\\EINSTELLUNGEN\\MATRIX.md",
-        "gloss": "Wiki\\Anleitungen\\EINSTELLUNGEN\\GLOSSARY.md",
-        "mds": "Manuals\\mds",
-        "pdfs": "Manuals\\pdfs"
-    },
-    "results": {
-        "successful_files": {
-            "fr": [
-                "Anleitung_Dateiname_2025-02-11_Anleitungstyp_Abkürzung_FR.pdf"
-            ],
-            "it": [
-                "Anleitung_Dateiname_2025-02-11_Anleitungstyp_Abkürzung_IT.pdf"
-            ],
-            "en": [
-                "Anleitung_Dateiname_2025-02-11_Anleitungstyp_Abkürzung_EN.pdf"
-            ],
-            "de": [
-                "Anleitung_Dateiname_2025-02-11_Anleitungstyp_Abkürzung_DE.pdf"
-            ]
+    "paths": {
+        "project": {
+            "root_dir": "C:\\DEV\\GGPlusManualGenerator",
+            "entries": {
+                "config": "config"
+            }
         },
-        "unsuccessful_files": {
-            "fr": [],
-            "it": [],
-            "en": [],
-            "de": []
+        "data": {
+            "root_dir": "C:\\DEV\\GGPlusManualData",
+            "entries": {
+                "wiki": "WikiPages",
+                "trans": "Translations",
+                "toc_matrix": "WikiPages\\EINSTELLUNGEN\\MATRIX.md",
+                "gloss": "WikiPages\\EINSTELLUNGEN\\GLOSSARY.md",
+                "mds": "Manuals\\mds",
+                "pdfs": "Manuals\\pdfs",
+                "test": "path/to/test"
+            }
+        },
+        "self": {
+            "root_dir": "C:\\DEV\\GGplusManualGenerator\\src\\configlib\\configlib",
+            "entries": {
+                "temp": "temp"
+            }
         }
     },
-    "stats": {
-        "last_build": "2025-05-02T15:15:43.482645"
-    },
-    "test": {
-        "float": 1.0,
-        "string": "abc",
-        "int": 1
+    "manuals": {
+        "all": [],
+        "selected": [
+            "Test"
+        ]
     },
     "translate": {
         "engine": "openai",
