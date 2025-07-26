@@ -1,245 +1,214 @@
 from pathlib import Path
 import json
-import ast
-from typing import Any, Dict, Union
-from configlib.pathresolver import PathResolver
+from types import SimpleNamespace
+from typing import Any, Dict, Union, List
+
+
+def _dict_to_namespace(d: Any) -> Any:
+    """
+    Recursively convert dicts into SimpleNamespace for attribute access.
+    """
+    if isinstance(d, dict):
+        return SimpleNamespace(**{k: _dict_to_namespace(v) for k, v in d.items()})
+    if isinstance(d, list):
+        return [_dict_to_namespace(item) for item in d]
+    return d
+
+
+class PathGroup:
+    """
+    Represents a named group of paths under one root directory.
+    Provides attribute access to each entry and the root directory.
+    """
+    def __init__(self, spec: Dict[str, Any]) -> None:
+        self._root = Path(spec["root_dir"]).resolve()
+        self._entries: Dict[str, str] = spec.get("entries", {})
+
+    @property
+    def root_dir(self) -> Path:
+        """Absolute root directory for this group."""
+        return self._root
+
+    def __getattr__(self, name: str) -> Path:
+        if name in self._entries:
+            return (self._root / self._entries[name]).resolve()
+        raise AttributeError(f"No path entry '{name}' in this group.")
+
+    def list_entries(self) -> List[str]:
+        """Return all entry keys in this group."""
+        return list(self._entries.keys())
+
+    def has_entry(self, name: str) -> bool:
+        """Check if an entry exists in this group."""
+        return name in self._entries
+
+    def add_entry(self, name: str, rel_path: str) -> None:
+        """Add a new relative path entry to this group."""
+        if name in self._entries:
+            raise KeyError(f"Entry '{name}' already exists.")
+        self._entries[name] = rel_path
+
+    def remove_entry(self, name: str) -> None:
+        """Remove an existing path entry from this group."""
+        if name not in self._entries:
+            raise KeyError(f"Entry '{name}' does not exist.")
+        del self._entries[name]
+
+
+class MultiRootPathResolver:
+    """
+    Allows namespaced path resolution via attribute access:
+    cfg.paths.<group>.<entry>
+    """
+    def __init__(self, spec: Dict[str, Dict[str, Any]]) -> None:
+        self._spec = spec
+
+    def __getattr__(self, group: str) -> PathGroup:
+        if group in self._spec:
+            return PathGroup(self._spec[group])
+        raise AttributeError(f"No path group '{group}'.")
+
+    def list_groups(self) -> List[str]:
+        """Return all defined path groups."""
+        return list(self._spec.keys())
+
+    def has_group(self, group: str) -> bool:
+        """Check if a path group exists."""
+        return group in self._spec
 
 
 class AppConfig:
     """
-    Application configuration manager that supports runtime updates,
-    auto-conversion of values, and safe JSON persistence.
+    Application configuration manager.
 
-    Parameters:
-        project_root (str | Path | None): The root directory of the project. If None, defaults to module location.
-        rel_config_file_path (str): Path (relative to project_root) where config.json and config_default.json are located.
+    Args:
+        config_file_path: Path to the project's config.json file.
 
     Attributes:
-        config_file: The active configuration file.
-        config_file_default: The fallback default configuration.
-        path: A dynamic path dictionary with all relative paths resolved to absolute.
-
-    Example:
-        config = AppConfig(project_root="/my/project", rel_config_file_path="config")
-        print(config.log["level"])
+        paths: MultiRootPathResolver for namespaced path access.
+        Other top-level config sections exposed as namespaces.
     """
-    REQUIRED_KEYS = ["log", "path"]
+    REQUIRED_KEYS = ["paths"]
 
-    def __init__(self, project_root: Union[str, Path], rel_config_file_path: str) -> None:
-        self.project_root: Path = Path(project_root).resolve()
-        self.config_dir: Path = (self.project_root / rel_config_file_path).resolve()
-        self.config_file = self.config_dir / 'config.json'
-        self.config_file_default = self.config_dir / 'config_default.json'
+    def __init__(self, config_file_path: Union[str, Path]) -> None:
+        self.config_file = Path(config_file_path)
+        self.config_default = self.config_file.with_name(
+            f"{self.config_file.stem}_default{self.config_file.suffix}"
+        )
         self._config_data: Dict[str, Any] = {}
 
         self._ensure_file()
         self._load()
         self.validate()
-        self.path = PathResolver(self._config_data.get("path", {}), self.project_root)
+
+        # Convert all non-path sections into namespaces for attribute access
+        for key, val in self._config_data.items():
+            if key != "paths":
+                setattr(self, key, _dict_to_namespace(val))
+
+        # Namespaced path resolver
+        self.paths = MultiRootPathResolver(self._config_data["paths"])
 
     def _ensure_file(self) -> None:
-        """
-        Ensure that the main config file exists.
-
-        - If `config.json` is missing, copy `config_default.json` to replace it.
-        - Raises a FileNotFoundError if neither file exists.
-        """
         if not self.config_file.is_file():
-            if self.config_file_default.is_file():
-                default_text = self.config_file_default.read_text(encoding='utf-8')
-                self.config_file.write_text(default_text, encoding='utf-8')
+            if self.config_default.is_file():
+                text = self.config_default.read_text(encoding="utf-8")
+                self.config_file.write_text(text, encoding="utf-8")
             else:
-                raise FileNotFoundError(
-                    f"Config missing and default not found: \n    {self.config_file}\n    {self.config_file_default}")
-
-    def _process_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Recursively process a nested dictionary and convert leaf string values.
-
-        - Attempts to cast strings into Python primitives (int, float, list, bool).
-        - Returns a dictionary with typed values.
-
-        Args:
-            config (dict): Raw config dictionary loaded from JSON.
-
-        Returns:
-            dict: The processed, typed configuration dictionary.
-        """
-        def try_cast(value: Any) -> Any:
-            if not isinstance(value, str):
-                return value
-            value = value.strip()
-            try:
-                return ast.literal_eval(value)
-            except (ValueError, SyntaxError):
-                return value
-
-        return {
-            key: self._process_config(val) if isinstance(val, dict) else try_cast(val)
-            for key, val in config.items()
-        }
-
-    def _load_json_file(self, path: Path) -> Dict[str, Any]:
-        """
-        Load a JSON file from the given path.
-
-        Args:
-            path (Path): Path to a JSON file.
-
-        Returns:
-            dict: Parsed JSON content.
-
-        Raises:
-            ValueError: If the file contains invalid JSON.
-        """
-        try:
-            return json.loads(path.read_text(encoding='utf-8'))
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON at {path}: {e}")
+                # Create minimal default structure if none exists
+                default_template: Dict[str, Any] = {"paths": {}}
+                self.config_default.write_text(
+                    json.dumps(default_template, indent=4, ensure_ascii=False),
+                    encoding="utf-8"
+                )
+                self.config_file.write_text(
+                    json.dumps(default_template, indent=4, ensure_ascii=False),
+                    encoding="utf-8"
+                )
 
     def _load(self) -> None:
-        """
-        Load the configuration from disk.
-
-        - Tries loading `config.json`; if invalid, falls back to `config_default.json`.
-        - Casts values using `_process_config()`.
-        - Sets all top-level keys as attributes on the AppConfig instance.
-        """
         try:
-            raw = self._load_json_file(self.config_file)
-        except ValueError:
-            raw = self._load_json_file(self.config_file_default)
-            self.config_file.write_text(json.dumps(raw, indent=4, ensure_ascii=False), encoding='utf-8')
-
-        self._config_data = self._process_config(raw)
-        for key, val in self._config_data.items():
-            setattr(self, key, val)
-
-    def save(self) -> None:
-        """
-        Save the current configuration to disk.
-
-        - Creates a backup of the existing config file as `config.json.bak`.
-        - Serializes internal data with indentation and UTF-8 encoding.
-        - Does not validate against schema; assumes prior validation.
-        """
-        if self.config_file.is_file():
-            backup_path = self.config_file.with_suffix('.json.bak')
-            self.config_file.replace(backup_path)
-
-        serialized = json.dumps(self._config_data, indent=4, ensure_ascii=False)
-        self.config_file.write_text(serialized, encoding='utf-8')
-
-    def reset_to_default(self) -> None:
-        """
-        Overwrite the current config with the default version.
-
-        - Replaces `config.json` with `config_default.json`.
-        - Reloads and reinitializes config state.
-        """
-        if not self.config_file_default.is_file():
-            raise FileNotFoundError(f"Default config missing: {self.config_file_default}")
-        self.config_file.write_text(self.config_file_default.read_text(encoding='utf-8'), encoding='utf-8')
-        self._load()
+            self._config_data = json.loads(
+                self.config_file.read_text(encoding="utf-8")
+            )
+        except json.JSONDecodeError:
+            default = json.loads(
+                self.config_default.read_text(encoding="utf-8")
+            )
+            self.config_file.write_text(
+                json.dumps(default, indent=4, ensure_ascii=False),
+                encoding="utf-8"
+            )
+            self._config_data = default
 
     def validate(self) -> None:
-        """
-        Validate that all required top-level keys exist.
-
-        Raises:
-            KeyError: if any required key is missing.
-        """
         for key in self.REQUIRED_KEYS:
             if key not in self._config_data:
-                raise KeyError(f"Missing required config section: '{key}'")
+                raise KeyError(f"Missing required section '{key}' in config.json")
 
-    def get(self, key: str, default: Any = None) -> Any:
-        """
-        Retrieve a config entry by key.
-
-        Args:
-            key (str): The top-level key to fetch.
-            default (Any): Fallback value if key is missing.
-
-        Returns:
-            Any: The value of the config entry.
-        """
-        return self._config_data.get(key, default)
-
-    def has(self, key: str) -> bool:
-        """
-        Check if a key exists in the configuration.
-
-        Args:
-            key (str): The top-level key to check.
-
-        Returns:
-            bool: True if present, False otherwise.
-        """
-        return key in self._config_data
-
-    def set(self, key: str, value: Any, strict: bool = True) -> None:
-        """
-        Update or add a config entry.
-
-        Args:
-            key (str): The top-level key to modify or add.
-            value (Any): The value to assign to the key.
-            strict (bool): If True, only existing keys may be modified.
-
-        Raises:
-            KeyError: If key doesn't exist and strict is True.
-            TypeError: If merging incompatible types.
-        """
-        if strict and key not in self._config_data:
-            raise KeyError(f"Unknown config key: {key}")
-
-        # Ensure that dicts are only merged with dicts
-        if key in self._config_data and isinstance(self._config_data[key], dict):
-            if not isinstance(value, dict):
-                raise TypeError(f"Expected dict for key '{key}', got {type(value).__name__}")
-
-        if isinstance(self._config_data[key], dict) and isinstance(value, dict):
-            self._config_data[key] = {**self._config_data[key], **value}
-        else:
-            self._config_data[key] = value
-        setattr(self, key, self._config_data[key])
+    def save(self) -> None:
+        # Backup existing config
+        if self.config_file.is_file():
+            backup = self.config_file.with_suffix('.json.bak')
+            self.config_file.replace(backup)
+        # Write updated config data
+        text = json.dumps(self._config_data, indent=4, ensure_ascii=False)
+        self.config_file.write_text(text, encoding="utf-8")
 
 
 if __name__ == '__main__':
-    project_root = Path(__file__).parent.resolve()
-    print("[INFO] Project Root:", project_root)
-    config = AppConfig(project_root, '../config')
+    # Example usage with reference config.json
+    import os
 
-    print("[INFO] Wiki Path:", config.path['wiki'])
-    print("[INFO] Project Root:", config.project_root)
+    def p_title(s: str) -> str:
+        print("\n# ", s.upper() if s else '')
 
-    print("[UPDATE] Setting 'log.level' to 'debug'")
-    config.set('log', {"level": "debug"})
 
-    print("[UPDATE] Setting 'test.foo' to 'baz'")
-    config.set('test', {"foo": "baz"})
+    config = AppConfig('../config/config.json')
+    p_title("Config Loading")
+    print(f"Config loaded from: {config.config_file}")
 
-    print("[ADD] Adding new path 'backup': 'Backups'")
-    config.path['backup'] = 'Backups'
-    print("[INFO] New path added:", config.path['backup'])
+    p_title("Access build settings")
+    print(f"cfg.build['mode']: {config.build.mode}")
+    print(f"cfg.git['branch']: {config.git.branch}")
+    print(f"cfg.paths.data.toc_matrix: {config.paths.data.toc_matrix}")
+    print(f"cfg.paths.project.config: {config.paths.project.config}")
 
-    print("[MODIFY] Updating 'backup' path to absolute archive location")
-    config.path['backup'] = 'Archives'
-    print("[INFO] Modified path:", config.path['backup'])
+    p_title("Add entry")
+    config.paths.data.remove_entry('test')
+    config.paths.data.add_entry('test', 'path/to/test')
+    print("cfg.paths.data.add_entry('test', 'path/to/test')")
+    print(f"cfg.paths.data.test: {config.paths.data.test}")
 
-    print("[DELETE] Removing 'backup' path from config")
-    del config.path['backup']
-    print("[INFO] Path 'backup' removed.")
+    p_title("Delete entry")
+    print(f"config.paths.data.remove_entry('test): {config.paths.data.remove_entry('test')}")
 
-    # Persist the changes
-    config.save()
-    print("[INFO] Configuration saved.")
+    p_title("List available path groups")
+    print(f"cfg.paths.list_groups(): {config.paths.list_groups()}")
 
-    # Show updated test key
-    print("[DEBUG] Test section:", config.test)
+    p_title("Inspect project group")
+    proj = config.paths.project
+    print("proj = cfg.paths.project")
+    print(f"proj.root_dir: {proj.root_dir}")
+    print(f"proj.config: {proj.config}")
 
-    # Reset to default
-    print("[RESET] Reverting to default configuration...")
-    config.reset_to_default()
-    print("[INFO] Configuration reset.")
+    p_title("Inspect data group")
+    data = config.paths.data
+    print("data = cfg.paths.data")
+    print(f"data.root_dir: {data.root_dir}")
+    for entry in data.list_entries():
+        print(f"  * data.{entry}: {getattr(data, entry)}")
+
+    p_title("Check non-existent group")
+    print(f"cfg.paths.has_group('archive'): {config.paths.has_group('archive')}")
+
+    p_title("Dynamically add new path group")
+    self_spec = {
+        'root_dir': os.getcwd(),
+        'entries': {'temp': 'temp'}
+    }
+    config._config_data['paths']['self'] = self_spec
+    print(f"cfg.paths.self.temp: {config.paths.self.temp}")
+    # config.save()
+    p_title("Config Save")
+    print("Config updated and saved.")
