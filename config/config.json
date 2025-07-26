@@ -34,7 +34,8 @@
         "project": {
             "root_dir": "C:\\DEV\\GGPlusManualGenerator",
             "entries": {
-                "config": "config"
+                "config": "config",
+                "assets": "assets"
             }
         },
         "data": {
@@ -44,15 +45,10 @@
                 "trans": "Translations",
                 "toc_matrix": "WikiPages\\EINSTELLUNGEN\\MATRIX.md",
                 "gloss": "WikiPages\\EINSTELLUNGEN\\GLOSSARY.md",
+                "manuals": "Manuals",
+                "manual_header": "WikiPages\\EINSTELLUNGEN\\HANDBUECHER",
                 "mds": "Manuals\\mds",
-                "pdfs": "Manuals\\pdfs",
-                "test": "path/to/test"
-            }
-        },
-        "self": {
-            "root_dir": "C:\\DEV\\GGplusManualGenerator\\src\\configlib\\configlib",
-            "entries": {
-                "temp": "temp"
+                "pdfs": "Manuals\\pdfs"
             }
         }
     },
