@@ -1,6 +1,6 @@
 from pathlib import Path
 import json
-from typing import Any, Dict, Union, List
+from typing import Any, Dict, Iterator, Union, List
 
 
 class ConfigSection:
@@ -20,6 +20,15 @@ class ConfigSection:
 
     def __setattr__(self, name: str, value: Any) -> None:
         self._data[name] = value
+
+    def __delattr__(self, name: str) -> None:
+        try:
+            del self._data[name]
+        except KeyError:
+            raise AttributeError(f"No config key '{name}'.") from None
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._data)
 
 
 class PathGroup:
