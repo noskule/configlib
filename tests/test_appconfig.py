@@ -45,6 +45,25 @@ class TestAppConfig(unittest.TestCase):
             assert saved["build"] == {"lang": "de", "manuals_all": ["TEST"]}
             assert AppConfig(config_dir / "config.json").stats.last_build == "2026-10-22T20:01:00"
 
+    def test_section_keys_can_be_listed_and_deleted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_dir = Path(tmp) / "config"
+            config_dir.mkdir()
+            data = {"paths": {}, "manuals": {"TEST": 0, "Händler": 1}}
+            write_json(config_dir / "config.json", data)
+            write_json(config_dir / "config_default.json", data)
+
+            config = AppConfig(config_dir / "config.json")
+            assert list(config.manuals) == ["TEST", "Händler"]
+            del config.manuals.TEST
+            setattr(config.manuals, "GatewayTool", 0)
+            config.save()
+
+            saved = json.loads((config_dir / "config.json").read_text(encoding="utf-8"))
+            assert saved["manuals"] == {"Händler": 1, "GatewayTool": 0}
+            with self.assertRaises(AttributeError):
+                del config.manuals.TEST
+
     def test_appconfig_load_modify_reset(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
