@@ -1,18 +1,25 @@
 from pathlib import Path
 import json
-from types import SimpleNamespace
 from typing import Any, Dict, Union, List
 
 
-def _dict_to_namespace(d: Any) -> Any:
+class ConfigSection:
     """
-    Recursively convert dicts into SimpleNamespace for attribute access.
+    Attribute view of one config dict. Reads and writes go to the dict
+    itself, so AppConfig.save() writes values set as attributes.
     """
-    if isinstance(d, dict):
-        return SimpleNamespace(**{k: _dict_to_namespace(v) for k, v in d.items()})
-    if isinstance(d, list):
-        return [_dict_to_namespace(item) for item in d]
-    return d
+    def __init__(self, data: Dict[str, Any]) -> None:
+        object.__setattr__(self, "_data", data)
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            value = self._data[name]
+        except KeyError:
+            raise AttributeError(f"No config key '{name}'.") from None
+        return ConfigSection(value) if isinstance(value, dict) else value
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        self._data[name] = value
 
 
 class PathGroup:
@@ -101,10 +108,10 @@ class AppConfig:
         self._load()
         self.validate()
 
-        # Convert all non-path sections into namespaces for attribute access
+        # Attribute access to all non-path sections
         for key, val in self._config_data.items():
             if key != "paths":
-                setattr(self, key, _dict_to_namespace(val))
+                setattr(self, key, ConfigSection(val) if isinstance(val, dict) else val)
 
         # Namespaced path resolver
         self.paths = MultiRootPathResolver(self._config_data["paths"])
