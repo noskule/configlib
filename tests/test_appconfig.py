@@ -26,6 +26,25 @@ import unittest
 
 class TestAppConfig(unittest.TestCase):
 
+    def test_values_set_as_attributes_are_saved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_dir = Path(tmp) / "config"
+            config_dir.mkdir()
+            data = {"paths": {}, "build": {"lang": "de"}, "stats": {"last_build": ""}}
+            write_json(config_dir / "config.json", data)
+            write_json(config_dir / "config_default.json", data)
+
+            config = AppConfig(config_dir / "config.json")
+            config.stats.last_build = "2026-10-22T20:01:00"
+            config.stats.successful_files = {"de": ["a.pdf"]}
+            config.build.manuals_all = ["TEST"]
+            config.save()
+
+            saved = json.loads((config_dir / "config.json").read_text(encoding="utf-8"))
+            assert saved["stats"] == {"last_build": "2026-10-22T20:01:00", "successful_files": {"de": ["a.pdf"]}}
+            assert saved["build"] == {"lang": "de", "manuals_all": ["TEST"]}
+            assert AppConfig(config_dir / "config.json").stats.last_build == "2026-10-22T20:01:00"
+
     def test_appconfig_load_modify_reset(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
