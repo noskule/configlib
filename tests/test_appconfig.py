@@ -1,3 +1,4 @@
+import codecs
 import tempfile
 import json
 from pathlib import Path
@@ -25,6 +26,33 @@ def create_mock_config(temp_root: Path):
 import unittest
 
 class TestAppConfig(unittest.TestCase):
+
+    def test_unparsable_config_raises_and_is_left_untouched(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_dir = Path(tmp) / "config"
+            config_dir.mkdir()
+            write_json(config_dir / "config_default.json", {"paths": {}})
+            broken = config_dir / "config.json"
+            broken.write_text('{"paths": {}, ', encoding="utf-8")
+
+            with self.assertRaises(ValueError) as caught:
+                AppConfig(broken)
+
+            self.assertIn(str(broken), str(caught.exception))
+            self.assertIn("line 1", str(caught.exception))
+            self.assertEqual(broken.read_text(encoding="utf-8"), '{"paths": {}, ')
+
+    def test_config_with_utf8_bom_is_loaded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_dir = Path(tmp) / "config"
+            config_dir.mkdir()
+            write_json(config_dir / "config_default.json", {"paths": {}, "build": {"lang": "default"}})
+            text = json.dumps({"paths": {}, "build": {"lang": "fr"}})
+            (config_dir / "config.json").write_bytes(codecs.BOM_UTF8 + text.encode("utf-8"))
+
+            config = AppConfig(config_dir / "config.json")
+
+            self.assertEqual(config.build.lang, "fr")
 
     def test_values_set_as_attributes_are_saved(self):
         with tempfile.TemporaryDirectory() as tmp:

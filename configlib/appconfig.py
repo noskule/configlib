@@ -145,17 +145,10 @@ class AppConfig:
     def _load(self) -> None:
         try:
             self._config_data = json.loads(
-                self.config_file.read_text(encoding="utf-8")
+                self.config_file.read_text(encoding="utf-8-sig")
             )
-        except json.JSONDecodeError:
-            default = json.loads(
-                self.config_default.read_text(encoding="utf-8")
-            )
-            self.config_file.write_text(
-                json.dumps(default, indent=4, ensure_ascii=False),
-                encoding="utf-8"
-            )
-            self._config_data = default
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Cannot parse {self.config_file}: {exc}") from exc
 
     def validate(self) -> None:
         for key in self.REQUIRED_KEYS:
